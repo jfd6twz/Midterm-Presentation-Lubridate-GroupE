@@ -1,0 +1,409 @@
+---
+title: 'Lubridate: Working with Dates & Times in R'
+author: "Malcolm Mashig | Jordan Denish | Kunaal Sarnaik"
+date: "Due Date: March 4th, 2020"
+output: 
+  html_document:
+    df: kable
+    theme: journal
+    highlight: tango
+    toc: true
+    toc_depth: 4
+    toc_float:
+      collapsed: true
+      smooth_scroll: true
+    
+---
+
+***
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+library(tidyverse)
+# install.packages('prettydoc')
+library(prettydoc)
+```
+
+### Lubridate Overview {.tabset}
+
+#### Purpose
+
+Date-time data can be extremely frustrating to work with in R or any coding language/interface. There are many characteristics of date-time data that must be taken into account -- including format, timezones, and calendar inconsistencies such as leap years and daylight savings time (DST). Base R commands for date-times are relatively unintuitive and have unpredictable results depending on the type of object being used. The `lubridate` package is the Tidyverse solution to the many problems that arise when working with dates and times that data scientists often encounter. The functions available through `lubridate` allow for simple and straightforward algebraic manipulation of date-time and time-span objects. 
+
+The difficulties of working with dates and times:
+
+- The (more than) 38 different time zones
+- Leap Days
+    - The year must be evenly divisible by 4
+    - BUT if the year is evenly divisible by 100, it must also be divisible by 400
+    - Therefore, 2100 is **not** a leap year while 2020 and 2400 **are** leap years
+- Some minutes have 61 seconds (leap second as the Earth’s rotation is gradually slowing down over time)
+- Daylight Savings Times (DST)
+
+*Dates and times must reconcile two physical phenomena (rotation of the Earth and its orbit with the sun) with a whole raft of geopolitical phenomena*
+
+***
+
+#### Background Information
+
+The three object types dealing with dates and times:
+
+- Date: $<$date$>$ tibble
+- Time within a day: $<$time$>$ tibble
+- Date-time (date along with a time): $<$dttm$>$ tibble
+
+
+Three ways likely to create a date/time:
+
+- From a string
+
+    - ... that must be parsed into a date-time. `lubridate` automatically works out the format once you specify the order of the components (year, month, day, etc.). It can also handle unquoted numbers.
+
+- From individual date-time components
+
+    - You may have individual components spread across multiple columns in a data set
+
+- From an existing date/time object
+
+    - You may want to switch between a date-time and a date (i.e., conversion)
+    
+***
+    
+#### Version History
+
+##### *Version 0.1* came out on August 14th, 2010
+
+  - Many base functions including am (boolean to check if a date occurs in am or pm), is.instant (checks if it is a date-time object) and guess_format (character or numeric vector)
+    
+  - R could now work with complicated features of time such as leap years, daylight savings time, different time zones, military time, and a wide variety of date-time formats.
+
+  - Initial versions would overwrite many functions and basic operations from base R (such as “+”, “-”, “start()”, “end”), which made it difficult to use `lubridate` with highly complicated programs
+
+  - `lubridate` has since been gradually modified to become more flexible with different kinds of data structures and programs.
+
+##### *Version 1.1.0* came out on March 5th, 2012
+  - Interval creation function (%-%)
+  - No longer overwrites base R methods for addition, subtraction, multiplication, division, etc.
+
+##### *Version 1.3.0* came out on September 20th, 2013
+   
+  - Allowed math used on dates and times to be more consistent in operation
+  - If adding or subtracting months or days would result in a non-existent date, returns NaN instead of a day in the following month or year (what occurred prior to this udpate)
+
+##### *Version 1.5.0* came out on December 3rd, 2015
+
+  - Added a time_length method and time spans were refactored for increased speed of compilation and decreased run time
+
+##### *Version 1.7.2* came out on February 6th, 2018
+
+  - Comparability between Duration, Period, and difftime functions
+
+  - Updates since *Version 1.7.2* have simply been bug fixes or patches rather than the addition of new functions
+
+##### Current is *Version 1.7.4*, which came out on April 11th, 2018
+
+***
+
+#### Similar Packages / Usage Dependency
+
+- Part of the tidyverse ecosystem of packages	
+    - Shares underlying design philosophy, grammar, and data structures with other tidyverse subpackages such as readr, ggplot2, purrr, and tidyr
+
+- Relies on Google’s CCTZ library for the date-time updates and time-zone manipulation (built-in CCTZ package)
+    - Civil-time library -> Computing with human-scale time, such as simple dates
+    - Time-Zone library -> IANA (Internet Assigned Numbers Authority) time zone database
+    - Installed on the system to convert between civil time and absolute time
+    - Time Zones are used to convert between absolute time and civil time
+    
+- Base R has built in functions that can work with and manipulate dates
+   
+    - Base R: as.Date() converts a string to a date, but the string must be in the exact YYYY-MM-DD format or else the conversion will be incorrect.
+       - Much less flexible than `lubridate`
+    - Can also use the sequence function with dates and times
+    - Base R also includes the classes POSIXct and POSIXlt that can do basic operations such as reading in and accessing dates/times:
+      - POSIXct works with calendar times
+      - POSIXlt works with local times
+    - Lubridate has more capabilities to work with date and time complications compared to base R.
+
+- `Chron` Package
+   
+    - Creates chronological objects that can handle dates and times
+      - Creates vectors with times and dates
+    - Can do simple operations such as data/time comparisons and addition/subtraction
+    - Can sort by date and time
+    - Still cannot handle more complicated features of dates and times such as time zones and projecting future times
+    
+- `timelineS` Package
+
+    - Plotting annotated timelines, grouped timelines, and exploratory graphics such as histograms
+    - Can filter and summarize date data by duration and convert to calendar units
+    - Lubridate does not have any built-in functions that can create visual timelines or graphics that `timelineS` does
+         - Instead would have to use `ggplot2` in conjunction in order to do so
+    - `timelineS` does NOT provide any functions dealing with time objects or geopolitical complications (DST, time zones, etc.)
+         - Still must use lubridate to reconcile these 
+
+***
+
+### Examples of Usage {.tabset}
+
+#### **Easily convert disorganized data entries to dates**
+
+<br>
+
+In Base R:
+
+```{r}
+data <- data.frame(
+  date = c("2019/05/03",
+           "2018/02/8",
+           "2016-02/29"), # notice the data entry error
+  measure = c(25, 22, 17)
+)
+data %>% 
+  mutate(
+    date = as.Date(date)
+  )
+data %>% ## Not what we want
+  ggplot() +
+  geom_point(aes(date, measure))
+
+# An unnecessary step
+data$date = gsub(
+  x = data$date, 
+  pattern = "-", 
+  replacement = "/"
+  )
+
+data %>% 
+  mutate(
+    date = as.Date(date)
+  )
+```
+As can be seen with base R in the above chunks, it is necessary to have an additional step to replace the invalid date format with a valid one prior to R recognizing the date. Otherwise, it calls the date NA.
+
+Also notice how the plot above is not really continuous in terms of the time, it is instead discrete in terms of the date. Base R treats the dates as categories rather than along a continuous timeline. 
+
+<br>
+
+With `lubridate`:
+
+```{r}
+# install.packages('lubridate')
+library(lubridate)
+lubridata <- data %>% 
+  mutate(
+    date = ymd(date)
+  )
+
+lubridata %>% # What we want
+  ggplot() +
+  geom_point(aes(date, measure))
+```
+
+With lubridate, there is no need for the additional replacement step. It immediately recognizes the date with this format. The plot is also now continuous on the x-axis in terms of time. 
+
+NOTICE: The smaller size of the code chunk when using lubridate rather than using base R.
+
+***
+
+#### **Easily separate out date components**
+
+<br>
+
+In Base R:
+
+```{r}
+data$month = format(as.Date(data$date), "%m")
+data$year = format(as.Date(data$date), "%Y")
+data$day = format(as.Date(data$date), "%d")
+## character components
+```
+
+<br>
+
+With `lubridate`:
+
+```{r}
+data %>% # ensures numeric components
+  mutate(month = month(date),
+         year = year(date),
+         day = day(date))
+```
+
+***
+
+#### **Easily manipulates dates**
+
+<br>
+
+In Base R:
+
+```{r}
+as.Date(data$date) + 365*4
+# Lacks intuition and flexibility
+```
+
+<br>
+
+With `lubridate`:
+
+```{r}
+data %>% 
+  mutate(
+    date = ymd(date) + years(4)
+  )
+## last date is leap year day
+## works the same for months, days, minutes, etc.
+```
+
+***
+
+#### **Easily determine duration**
+
+<br>
+
+In Base R:
+
+```{r}
+difftime(
+  data$date[1],
+  data$date[2],
+  )
+```
+
+```{r, error=TRUE}
+## does not work with years or months
+difftime(
+  data$date[1],
+  data$date[2],
+  unit = "years"
+  )
+```
+
+<br>
+
+With `lubridate`:
+
+```{r, error = TRUE}
+# Safe - should return error
+time_length(
+  data$date[1] - data$date[2],
+  unit = "days")
+```
+
+```{r}
+time_length(
+  ymd(data$date[1]) - ymd(data$date[2]),
+  unit = "years")
+```
+
+As can be seen above, ymd function in lubridate can easily determine duration without throwing an error between years. 
+
+***
+
+#### **Other useful functions**
+
+<br>
+
+```{r}
+#Adding a time zone label to the date 
+# UTC is the universal time zone label
+mdy("January 31st, 2017", tz = "UTC")
+
+#Adds the hours, minutes, and seconds to the date for a date-time object
+mdy_hms("January 31st, 2020 11, 02, 01")
+
+#Returns the number of seconds and amount of weeks for 15 days
+ddays(15)
+
+#Adds a time zone argument to the date-time object. Can place the location of the time zone and it will automatically replace with the name of the time zone (EDT)
+ymd_hms("2015-06-01 12:00:00", tz = "America/New_York")
+
+#You can change the month of a date object if needed
+x <- ymd("2019-02-18")
+month(x) = 3
+x
+
+#Method floor_date changes the date to the nearest boundary of the given unit argument. 
+#In this case, changes the day to the first as the unit argument was month.
+floor_date(x, unit = "month")
+
+#Returns the weekday the given date was on
+wday(x, label = TRUE, abbr = FALSE)
+
+```
+
+***
+
+### Reflection {.tabset}
+
+#### Advantages
+
+- Efficiently tracks date and time data while taking into account all of the previously mentioned difficulties associated with it
+- Huge advancement on base R dealing with dates and times
+
+    - Works with complicated geopolitical ideas of leap years, daylight savings, and different time zones.
+    
+- Can make sorting between dates and times of data structures very easy
+
+    - Saves a lot of hassle and not as much worry about geopolitical phenomena (lubridate automatically accounts for it)
+    
+- Functions are well named and it is easy to identify what each one does
+
+    - ymd(<date>) parses into YYYY-MM-DD while ydm(<date>) parses into YYYY-DD-MM
+
+- Subpackage within tidyverse allows consistency between other packages and combined usage for complex goals.
+  
+    - Ggplot2, tidyr, purrr, etc.
+
+#### Disadvantages
+
+- Dependency on the CCTZ package
+   
+    - The ymd family of functions directly drop to the internal C parser for numeric months, but use R’s strptime() for alphabetic months. 
+    - Therefore, some of strptime()’s limitations are inherited by lubridate’s parser. 
+      - Ex. Truncated formats (%Y-%b) will not be parsed while numeric truncated formats (%Y-%m) are handled correctly by lubridate’s C parser. 
+    - If CCTZ is down or problematic lubridate could be affected
+    
+
+- R does not come with predefined time zone names, so it depends on the user’s operating system for time zone name
+  - Can be different with use of different computers and operating systems (Mac versus PC versus Linux).
+
+- Does not take into account holidays (Labor Day, Thanksgiving, etc.). 
+Does not recognize Thanksgiving is the third Thursday of November
+
+- Could be faster, as always
+
+- Last version was released in April 2018
+
+    - Has not been updated in almost two years
+    - Pending release has identified many compilation bugs that producers are currently fixing
+
+- Some locales that use DST on paper have populations within that may not actually practice it
+   
+    - Arizona contains a high percentage of people that do not follow DST
+
+
+#### Suggestions for Future Additions/Improvements
+
+- **Universal method** to parse automatically the day, month, year, and time of an input if it is in a compatible format
+    
+    - If the day is greater than 12, lubridate could recognize that it can’t be a valid month and use the potential universal function
+    - Limitation of this is that some day values (i.e., day $<$ 12) can also be possible month values
+
+- Calendar data structure or methods for scheduling, reminders, etc. that can be uploaded to the user’s console
+
+- Utilize a function that takes EXIF data input from photos to parse their date and time
+    
+     - Can see when a photo was taken if one wanted to sort chronologically among their photo library
+     - If you get a random photo from google, maybe parse the date-time object of access, production, upload, etc.
+
+- Be able to work with different calendars in other parts of the world (Chinese Calendar, Mayan Calendar, etc.)
+
+- Taking into account holidays for data sets on jobs, activity, etc.
+
+- Function to return the Carbon-12 to Carbon-14 isotope proportion or tree ring number of a past date
+  - Could be useful in STEM/Archaeology fields
+
+- Conversion to time durations on other planets or areas in the universe for GIS or aerospatial data sets
+
